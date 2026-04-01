@@ -1,13 +1,36 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mail, Lock, User } from "lucide-react";
+import { toast } from "sonner";
+import { getCurrentUser, loginUser } from "@/lib/auth";
 
 const Login = () => {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    if (getCurrentUser()) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [navigate]);
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const result = loginUser(email, password);
+
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+
+    toast.success("Signed in successfully.");
+    navigate("/dashboard", { replace: true });
+  };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -22,7 +45,7 @@ const Login = () => {
         </div>
 
         <div className="glass-card rounded-2xl p-6 neon-border">
-          <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">

@@ -1,16 +1,26 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, X } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
+import { getCurrentUser, logoutUser } from "@/lib/auth";
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState(getCurrentUser());
+  const navigate = useNavigate();
 
   const navLinks = [
     { label: "Features", href: "#features" },
     { label: "Pricing", href: "#pricing" },
     { label: "API", href: "#api" },
   ];
+
+  const handleLogout = () => {
+    logoutUser();
+    setCurrentUser(null);
+    setMobileOpen(false);
+    navigate("/", { replace: true });
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass-card border-b border-border/50">
@@ -33,12 +43,24 @@ const Navbar = () => {
         </div>
 
         <div className="hidden md:flex items-center gap-3">
-          <Link to="/login">
-            <Button variant="ghost" size="sm">Log in</Button>
-          </Link>
-          <Link to="/register">
-            <Button variant="cta" size="sm">Get Started Free</Button>
-          </Link>
+          {currentUser ? (
+            <>
+              <span className="text-sm text-muted-foreground">Hi, {currentUser.name}</span>
+              <Button variant="ghost" size="sm" onClick={handleLogout}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link to="/login">
+                <Button variant="ghost" size="sm">Log in</Button>
+              </Link>
+              <Link to="/register">
+                <Button variant="cta" size="sm">Get Started Free</Button>
+              </Link>
+            </>
+          )}
         </div>
 
         <button
@@ -62,12 +84,21 @@ const Navbar = () => {
             </a>
           ))}
           <div className="flex gap-2 pt-2">
-            <Link to="/login" className="flex-1">
-              <Button variant="ghost" size="sm" className="w-full">Log in</Button>
-            </Link>
-            <Link to="/register" className="flex-1">
-              <Button variant="cta" size="sm" className="w-full">Get Started</Button>
-            </Link>
+            {currentUser ? (
+              <Button variant="ghost" size="sm" className="w-full" onClick={handleLogout}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </Button>
+            ) : (
+              <>
+                <Link to="/login" className="flex-1">
+                  <Button variant="ghost" size="sm" className="w-full">Log in</Button>
+                </Link>
+                <Link to="/register" className="flex-1">
+                  <Button variant="cta" size="sm" className="w-full">Get Started</Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

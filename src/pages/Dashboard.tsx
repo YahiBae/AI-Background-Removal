@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import { Upload, ImageIcon, CreditCard, Clock, TrendingUp, Settings } from "lucide-react";
+import { getCurrentUser } from "@/lib/auth";
 
 const stats = [
   { icon: ImageIcon, label: "Images Today", value: "3 / 5", color: "text-primary" },
@@ -17,6 +18,8 @@ const recentUploads = [
 ];
 
 const Dashboard = () => {
+  const currentUser = getCurrentUser();
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -24,7 +27,9 @@ const Dashboard = () => {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-heading font-bold">Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Welcome back! Here's your overview.</p>
+            <p className="text-sm text-muted-foreground">
+              Welcome back{currentUser ? `, ${currentUser.name}` : ""}! Here's your overview.
+            </p>
           </div>
           <Link to="/upload">
             <Button variant="cta" className="rounded-xl">
