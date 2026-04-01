@@ -1,0 +1,160 @@
+import { useState, useCallback } from "react";
+import { Upload, X, Download, Loader2, ImageIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Navbar from "@/components/Navbar";
+import { useToast } from "@/hooks/use-toast";
+
+const UploadWorkspace = () => {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const { toast } = useToast();
+
+  const MAX_SIZE = 10 * 1024 * 1024;
+  const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
+
+  const handleFile = useCallback((f: File) => {
+    if (!ALLOWED.includes(f.type)) {
+      toast({ title: "Invalid format", description: "Only JPG, PNG, WEBP allowed.", variant: "destructive" });
+      return;
+    }
+    if (f.size > MAX_SIZE) {
+      toast({ title: "File too large", description: "Max size is 10MB.", variant: "destructive" });
+      return;
+    }
+    setFile(f);
+    setResult(null);
+    const reader = new FileReader();
+    reader.onload = (e) => setPreview(e.target?.result as string);
+    reader.readAsDataURL(f);
+  }, [toast]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  }, [handleFile]);
+
+  const handleProcess = async () => {
+    if (!file) return;
+    setProcessing(true);
+    // Simulate processing — replace with actual API call
+    await new Promise((r) => setTimeout(r, 2500));
+    setResult(preview);
+    setProcessing(false);
+    toast({ title: "Done!", description: "Background removed successfully." });
+  };
+
+  const reset = () => {
+    setFile(null);
+    setPreview(null);
+    setResult(null);
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      <div className="container mx-auto px-4 pt-24 pb-12">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-heading font-bold mb-2">
+            <span className="gradient-text">Upload</span> Your Image
+          </h1>
+          <p className="text-muted-foreground">Drag & drop or browse to remove the background</p>
+        </div>
+
+        {!file ? (
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            className={`max-w-2xl mx-auto glass-card rounded-2xl p-16 text-center cursor-pointer transition-all ${
+              dragOver ? "neon-border scale-[1.02]" : "border border-dashed border-border hover:border-primary/50"
+            }`}
+            onClick={() => document.getElementById("file-input")?.click()}
+          >
+            <Upload className="w-12 h-12 text-primary mx-auto mb-4 animate-float" />
+            <p className="text-lg font-medium mb-2">Drop your image here</p>
+            <p className="text-sm text-muted-foreground mb-4">or click to browse</p>
+            <p className="text-xs text-muted-foreground">JPG, PNG, WEBP • Max 10MB</p>
+            <input
+              id="file-input"
+              type="file"
+              accept=".jpg,.jpeg,.png,.webp"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+            />
+          </div>
+        ) : (
+          <div className="max-w-4xl mx-auto">
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Original */}
+              <div className="glass-card rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium text-muted-foreground">Original</span>
+                  <button onClick={reset} className="text-muted-foreground hover:text-foreground">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="rounded-xl overflow-hidden bg-muted/20 aspect-square flex items-center justify-center">
+                  <img src={preview!} alt="Original" className="max-w-full max-h-full object-contain" />
+                </div>
+              </div>
+
+              {/* Result */}
+              <div className="glass-card rounded-2xl p-4 neon-border">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium text-primary">Result</span>
+                </div>
+                <div
+                  className="rounded-xl overflow-hidden aspect-square flex items-center justify-center"
+                  style={{
+                    backgroundImage: 'repeating-conic-gradient(hsl(var(--muted)) 0% 25%, transparent 0% 50%)',
+                    backgroundSize: '16px 16px',
+                  }}
+                >
+                  {processing ? (
+                    <div className="text-center">
+                      <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">Removing background...</p>
+                    </div>
+                  ) : result ? (
+                    <img src={result} alt="Result" className="max-w-full max-h-full object-contain" />
+                  ) : (
+                    <div className="text-center">
+                      <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">Click process to start</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-center gap-4 mt-6">
+              {!result ? (
+                <Button variant="cta" size="lg" onClick={handleProcess} disabled={processing} className="rounded-xl px-8">
+                  {processing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {processing ? "Processing..." : "Remove Background"}
+                </Button>
+              ) : (
+                <>
+                  <Button variant="cta" size="lg" className="rounded-xl px-8">
+                    <Download className="w-4 h-4 mr-2" />
+                    Download PNG
+                  </Button>
+                  <Button variant="cta-outline" size="lg" onClick={reset} className="rounded-xl px-8">
+                    Upload Another
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default UploadWorkspace;
