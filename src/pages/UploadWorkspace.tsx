@@ -1,22 +1,59 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Upload, X, Download, Loader2, ImageIcon } from "lucide-react";
+import { Upload, X, Download, Loader2, ImageIcon, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import { useToast } from "@/hooks/use-toast";
 
 const WEBHOOK_URL = "https://sagarpun.app.n8n.cloud/webhook/remove-background";
+const HISTORY_STORAGE_KEY = "snap-background-history";
+const HISTORY_LIMIT = 30;
+
+type HistoryItem = {
+  id: string;
+  createdAt: string;
+  originalName: string;
+  originalPreview: string;
+  resultUrl: string;
+};
+
+const makeDownloadName = (originalName: string) => {
+  const dotIndex = originalName.lastIndexOf(".");
+  const base = dotIndex > 0 ? originalName.slice(0, dotIndex) : originalName;
+  return `${base}-no-bg.png`;
+};
 
 const UploadWorkspace = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [activeTab, setActiveTab] = useState<"workspace" | "history">("workspace");
+  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const { toast } = useToast();
 
   const MAX_SIZE = 10 * 1024 * 1024;
   const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as HistoryItem[];
+      if (Array.isArray(parsed)) {
+        setHistoryItems(parsed);
+      }
+    } catch {
+      toast({ title: "History reset", description: "Could not load saved history.", variant: "destructive" });
+    }
+  }, [toast]);
+
+  const saveHistory = useCallback((items: HistoryItem[]) => {
+    setHistoryItems(items);
+    window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(items));
+  }, []);
 
   const handleFile = useCallback((f: File) => {
     if (!ALLOWED.includes(f.type)) {
@@ -91,7 +128,20 @@ const UploadWorkspace = () => {
         throw new Error("Webhook response missing image URL.");
       }
 
-      setResult(data.url);
+      const resultUrl = String(data.url);
+      setResult(resultUrl);
+
+      if (preview) {
+        const item: HistoryItem = {
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          originalName: file.name,
+          originalPreview: preview,
+          resultUrl,
+        };
+        saveHistory([item, ...historyItems].slice(0, HISTORY_LIMIT));
+      }
+
       toast({ title: "Done!", description: "Background removed successfully." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to process the image.";
@@ -107,6 +157,41 @@ const UploadWorkspace = () => {
     setResult(null);
   };
 
+  const handleDownload = useCallback(async (imageUrl: string, originalName: string, id = "current") => {
+    setDownloadingId(id);
+
+    try {
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        throw new Error(`Download failed with status ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = makeDownloadName(originalName);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      toast({
+        title: "Download failed",
+        description: "Could not download automatically. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingId(null);
+    }
+  }, [toast]);
+
+  const clearHistory = () => {
+    window.localStorage.removeItem(HISTORY_STORAGE_KEY);
+    setHistoryItems([]);
+    toast({ title: "History cleared", description: "Saved uploads were removed." });
+  };
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -119,7 +204,31 @@ const UploadWorkspace = () => {
           <p className="text-muted-foreground">Drag & drop, browse files, or paste an image to remove the background</p>
         </div>
 
-        {!file ? (
+        <div className="max-w-4xl mx-auto mb-6 flex justify-center">
+          <div className="glass-card rounded-xl p-1 inline-flex gap-1">
+            <button
+              type="button"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                activeTab === "workspace" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setActiveTab("workspace")}
+            >
+              Workspace
+            </button>
+            <button
+              type="button"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition inline-flex items-center gap-2 ${
+                activeTab === "history" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setActiveTab("history")}
+            >
+              <History className="w-4 h-4" />
+              History ({historyItems.length})
+            </button>
+          </div>
+        </div>
+
+        {activeTab === "workspace" && !file ? (
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
@@ -163,7 +272,7 @@ const UploadWorkspace = () => {
               }}
             />
           </div>
-        ) : (
+        ) : activeTab === "workspace" ? (
           <div className="max-w-4xl mx-auto">
             <div className="grid md:grid-cols-2 gap-6">
               {/* Original */}
@@ -216,8 +325,18 @@ const UploadWorkspace = () => {
                 </Button>
               ) : (
                 <>
-                  <Button variant="cta" size="lg" className="rounded-xl px-8">
-                    <Download className="w-4 h-4 mr-2" />
+                  <Button
+                    variant="cta"
+                    size="lg"
+                    className="rounded-xl px-8"
+                    onClick={() => handleDownload(result, file?.name ?? "image", "current")}
+                    disabled={downloadingId === "current"}
+                  >
+                    {downloadingId === "current" ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 mr-2" />
+                    )}
                     Download PNG
                   </Button>
                   <Button variant="cta-outline" size="lg" onClick={reset} className="rounded-xl px-8">
@@ -226,6 +345,64 @@ const UploadWorkspace = () => {
                 </>
               )}
             </div>
+          </div>
+        ) : (
+          <div className="max-w-5xl mx-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Processing History</h2>
+              <Button variant="cta-outline" size="sm" onClick={clearHistory} disabled={historyItems.length === 0}>
+                Clear History
+              </Button>
+            </div>
+
+            {historyItems.length === 0 ? (
+              <div className="glass-card rounded-2xl p-12 text-center">
+                <ImageIcon className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                <p className="text-lg font-medium mb-1">No history yet</p>
+                <p className="text-sm text-muted-foreground">Process an image in Workspace to see it saved here.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {historyItems.map((item) => (
+                  <div key={item.id} className="glass-card rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="text-sm font-medium">{item.originalName}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</p>
+                      </div>
+                      <Button
+                        variant="cta"
+                        size="sm"
+                        onClick={() => handleDownload(item.resultUrl, item.originalName, item.id)}
+                        disabled={downloadingId === item.id}
+                      >
+                        {downloadingId === item.id ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4 mr-2" />
+                        )}
+                        Download
+                      </Button>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="rounded-xl overflow-hidden bg-muted/20 aspect-square flex items-center justify-center">
+                        <img src={item.originalPreview} alt="Original" className="max-w-full max-h-full object-contain" />
+                      </div>
+                      <div
+                        className="rounded-xl overflow-hidden aspect-square flex items-center justify-center"
+                        style={{
+                          backgroundImage: 'repeating-conic-gradient(hsl(var(--muted)) 0% 25%, transparent 0% 50%)',
+                          backgroundSize: '16px 16px',
+                        }}
+                      >
+                        <img src={item.resultUrl} alt="Result" className="max-w-full max-h-full object-contain" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
