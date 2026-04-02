@@ -22,6 +22,17 @@ const makeDownloadName = (originalName: string) => {
   return `${base}-no-bg.png`;
 };
 
+const normalizeImageUrl = (url: string) => {
+  if (!url) return url;
+
+  // Prevent mixed-content blocks on deployed HTTPS sites.
+  if (url.startsWith("http://")) {
+    return `https://${url.slice("http://".length)}`;
+  }
+
+  return url;
+};
+
 const UploadWorkspace = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -43,7 +54,12 @@ const UploadWorkspace = () => {
       if (!raw) return;
       const parsed = JSON.parse(raw) as HistoryItem[];
       if (Array.isArray(parsed)) {
-        setHistoryItems(parsed);
+        const normalized = parsed.map((item) => ({
+          ...item,
+          resultUrl: normalizeImageUrl(String(item.resultUrl)),
+        }));
+        setHistoryItems(normalized);
+        window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(normalized));
       }
     } catch {
       toast({ title: "History reset", description: "Could not load saved history.", variant: "destructive" });
@@ -128,7 +144,7 @@ const UploadWorkspace = () => {
         throw new Error("Webhook response missing image URL.");
       }
 
-      const resultUrl = String(data.url);
+      const resultUrl = normalizeImageUrl(String(data.url));
       setResult(resultUrl);
 
       if (preview) {
@@ -161,7 +177,7 @@ const UploadWorkspace = () => {
     setDownloadingId(id);
 
     try {
-      const response = await fetch(imageUrl);
+      const response = await fetch(normalizeImageUrl(imageUrl));
       if (!response.ok) {
         throw new Error(`Download failed with status ${response.status}`);
       }
