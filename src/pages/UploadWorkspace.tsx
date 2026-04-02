@@ -8,7 +8,6 @@ const WEBHOOK_URL = "https://sagarpun.app.n8n.cloud/webhook/remove-background";
 
 const UploadWorkspace = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const resultUrlRef = useRef<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -27,10 +26,6 @@ const UploadWorkspace = () => {
     if (f.size > MAX_SIZE) {
       toast({ title: "File too large", description: "Max size is 10MB.", variant: "destructive" });
       return false;
-    }
-    if (resultUrlRef.current) {
-      URL.revokeObjectURL(resultUrlRef.current);
-      resultUrlRef.current = null;
     }
     setFile(f);
     setResult(null);
@@ -91,18 +86,12 @@ const UploadWorkspace = () => {
         throw new Error(errorText || `Webhook request failed with status ${response.status}`);
       }
 
-      const blob = await response.blob();
-      if (blob.size === 0) {
-        throw new Error("Webhook returned an empty response.");
+      const data = await response.json();
+      if (!data.url) {
+        throw new Error("Webhook response missing image URL.");
       }
 
-      const resultUrl = URL.createObjectURL(blob);
-      if (resultUrlRef.current) {
-        URL.revokeObjectURL(resultUrlRef.current);
-      }
-      resultUrlRef.current = resultUrl;
-      setResult(resultUrl);
-
+      setResult(data.url);
       toast({ title: "Done!", description: "Background removed successfully." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to process the image.";
@@ -113,22 +102,11 @@ const UploadWorkspace = () => {
   };
 
   const reset = () => {
-    if (resultUrlRef.current) {
-      URL.revokeObjectURL(resultUrlRef.current);
-      resultUrlRef.current = null;
-    }
     setFile(null);
     setPreview(null);
     setResult(null);
   };
 
-  useEffect(() => {
-    return () => {
-      if (resultUrlRef.current) {
-        URL.revokeObjectURL(resultUrlRef.current);
-      }
-    };
-  }, []);
 
   return (
     <div className="min-h-screen bg-background">
