@@ -35,13 +35,13 @@ const features = [
 
 const FeaturesSection = () => {
   return (
-    <section id="features" className="py-24">
+    <section id="features" className="py-24 bg-gradient-to-b from-purple-50/30 to-white">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-heading font-bold mb-4">
-            Why Choose <span className="gradient-text">SnapCut AI</span>?
+          <h2 className="text-3xl sm:text-4xl font-heading font-bold mb-4 text-gray-900">
+            Why Choose <span className="bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">SnapCut AI</span>?
           </h2>
-          <p className="text-muted-foreground max-w-xl mx-auto">
+          <p className="text-gray-600 max-w-xl mx-auto text-lg">
             Professional-grade background removal powered by state-of-the-art AI.
           </p>
         </div>
@@ -50,13 +50,13 @@ const FeaturesSection = () => {
           {features.map((feature) => (
             <div
               key={feature.title}
-              className="glass-card rounded-2xl p-6 hover:neon-border transition-all duration-300 group"
+              className="bg-white rounded-2xl p-6 border border-purple-100 hover:border-purple-300 hover:shadow-lg hover:shadow-purple-200/50 transition-all duration-300 group"
             >
-              <div className="w-12 h-12 rounded-xl gradient-cta flex items-center justify-center mb-4 group-hover:glow-primary transition-all">
-                <feature.icon className="w-6 h-6 text-primary-foreground" />
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-purple-600 to-pink-500 flex items-center justify-center mb-4 group-hover:shadow-lg group-hover:shadow-purple-400/50 transition-all">
+                <feature.icon className="w-6 h-6 text-white" />
               </div>
-              <h3 className="text-lg font-semibold mb-2 text-foreground">{feature.title}</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
+              <h3 className="text-lg font-semibold mb-2 text-gray-900">{feature.title}</h3>
+              <p className="text-sm text-gray-600 leading-relaxed">{feature.description}</p>
             </div>
           ))}
         </div>

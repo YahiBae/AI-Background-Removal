@@ -34,13 +34,13 @@ const plans = [
 
 const PricingSection = () => {
   return (
-    <section id="pricing" className="py-24">
+    <section id="pricing" className="py-24 bg-white">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-heading font-bold mb-4">
-            Simple, Transparent <span className="gradient-text">Pricing</span>
+          <h2 className="text-3xl sm:text-4xl font-heading font-bold mb-4 text-gray-900">
+            Simple, Transparent <span className="bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">Pricing</span>
           </h2>
-          <p className="text-muted-foreground max-w-xl mx-auto">
+          <p className="text-gray-600 max-w-xl mx-auto text-lg">
             Start free. Scale as you grow. No hidden fees.
           </p>
         </div>
@@ -49,37 +49,41 @@ const PricingSection = () => {
           {plans.map((plan) => (
             <div
               key={plan.name}
-              className={`rounded-2xl p-6 flex flex-col ${
+              className={`rounded-2xl p-6 flex flex-col transition-all duration-300 ${
                 plan.highlighted
-                  ? "neon-border glass-card relative"
-                  : "glass-card border border-border/50"
+                  ? "border-2 border-purple-400 bg-gradient-to-b from-purple-50/50 to-pink-50/30 shadow-xl shadow-purple-200/50 relative scale-105 sm:scale-100 lg:scale-105"
+                  : "border border-purple-100 bg-white hover:border-purple-200 hover:shadow-lg hover:shadow-purple-100/50"
               }`}
             >
               {plan.highlighted && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full gradient-cta text-xs font-semibold text-primary-foreground">
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-purple-600 to-pink-500 text-xs font-semibold text-white">
                   Most Popular
                 </div>
               )}
-              <h3 className="text-xl font-heading font-bold mb-1">{plan.name}</h3>
-              <p className="text-sm text-muted-foreground mb-4">{plan.description}</p>
+              <h3 className="text-xl font-heading font-bold mb-1 text-gray-900">{plan.name}</h3>
+              <p className="text-sm text-gray-600 mb-4">{plan.description}</p>
               <div className="mb-6">
-                <span className="text-4xl font-heading font-bold">
+                <span className="text-4xl font-heading font-bold text-gray-900">
                   {plan.price === "Custom" ? "" : "$"}{plan.price}
                 </span>
-                <span className="text-muted-foreground text-sm">{plan.period}</span>
+                <span className="text-gray-600 text-sm">{plan.period}</span>
               </div>
               <ul className="space-y-3 mb-8 flex-1">
                 {plan.features.map((f) => (
                   <li key={f} className="flex items-center gap-2 text-sm">
-                    <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span className="text-muted-foreground">{f}</span>
+                    <Check className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                    <span className="text-gray-700">{f}</span>
                   </li>
                 ))}
               </ul>
               <Link to="/register">
                 <Button
-                  variant={plan.highlighted ? "cta" : "cta-outline"}
-                  className="w-full rounded-xl"
+                  className={`w-full rounded-xl font-medium transition-all ${
+                    plan.highlighted
+                      ? "bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-400/50"
+                      : "border-2 border-purple-200 text-purple-700 hover:bg-purple-50 bg-white"
+                  }`}
+                  variant={plan.highlighted ? "default" : "outline"}
                 >
                   {plan.cta}
                 </Button>
