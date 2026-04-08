@@ -8,7 +8,7 @@ interface PreviewModalProps {
   originalName: string;
   isOpen: boolean;
   onClose: () => void;
-  onDownload: () => void;
+  onDownload: (editedBlob?: Blob) => void;
   isDownloading: boolean;
 }
 
@@ -24,6 +24,10 @@ const PreviewModal = ({
   const [zoom, setZoom] = useState(100);
   const [activeImage, setActiveImage] = useState<"original" | "result">("result");
   const [rotation, setRotation] = useState(0);
+  const [flipX, setFlipX] = useState(false);
+  const [flipY, setFlipY] = useState(false);
+  const [cropPercent, setCropPercent] = useState(100);
+  const [preparingDownload, setPreparingDownload] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,6 +44,78 @@ const PreviewModal = ({
   if (!isOpen) return null;
 
   const currentImage = activeImage === "original" ? originalImage : resultImage;
+  const cropInset = Math.max(0, (100 - cropPercent) / 2);
+
+  const handleEditedDownload = async () => {
+    setPreparingDownload(true);
+
+    try {
+      const response = await fetch(currentImage);
+      if (!response.ok) {
+        throw new Error("Could not load preview image for export.");
+      }
+
+      const sourceBlob = await response.blob();
+      const bitmap = await createImageBitmap(sourceBlob);
+
+      const baseCanvas = document.createElement("canvas");
+      baseCanvas.width = bitmap.width;
+      baseCanvas.height = bitmap.height;
+      const baseCtx = baseCanvas.getContext("2d");
+
+      if (!baseCtx) {
+        bitmap.close();
+        onDownload();
+        return;
+      }
+
+      baseCtx.save();
+      baseCtx.translate(baseCanvas.width / 2, baseCanvas.height / 2);
+      baseCtx.rotate((rotation * Math.PI) / 180);
+      baseCtx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+      baseCtx.drawImage(bitmap, -bitmap.width / 2, -bitmap.height / 2, bitmap.width, bitmap.height);
+      baseCtx.restore();
+      bitmap.close();
+
+      const cropScale = Math.max(0.5, cropPercent / 100);
+      const cropWidth = Math.max(1, Math.round(baseCanvas.width * cropScale));
+      const cropHeight = Math.max(1, Math.round(baseCanvas.height * cropScale));
+      const cropX = Math.max(0, Math.round((baseCanvas.width - cropWidth) / 2));
+      const cropY = Math.max(0, Math.round((baseCanvas.height - cropHeight) / 2));
+
+      const outputCanvas = document.createElement("canvas");
+      outputCanvas.width = cropWidth;
+      outputCanvas.height = cropHeight;
+      const outputCtx = outputCanvas.getContext("2d");
+
+      if (!outputCtx) {
+        onDownload();
+        return;
+      }
+
+      outputCtx.drawImage(
+        baseCanvas,
+        cropX,
+        cropY,
+        cropWidth,
+        cropHeight,
+        0,
+        0,
+        cropWidth,
+        cropHeight,
+      );
+
+      const editedBlob = await new Promise<Blob | null>((resolve) => {
+        outputCanvas.toBlob(resolve, "image/png");
+      });
+
+      onDownload(editedBlob ?? undefined);
+    } catch {
+      onDownload();
+    } finally {
+      setPreparingDownload(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
@@ -72,8 +148,8 @@ const PreviewModal = ({
               alt={activeImage === "original" ? "Original" : "Result"}
               className="object-contain"
               style={{
-                zoom: `${zoom}%`,
-                transform: `rotate(${rotation}deg)`,
+                transform: `scale(${zoom / 100}) rotate(${rotation}deg) scaleX(${flipX ? -1 : 1}) scaleY(${flipY ? -1 : 1})`,
+                clipPath: `inset(${cropInset}% ${cropInset}% ${cropInset}% ${cropInset}%)`,
                 transition: "transform 0.2s ease",
               }}
             />
@@ -86,6 +162,9 @@ const PreviewModal = ({
                 setActiveImage("original");
                 setZoom(100);
                 setRotation(0);
+                setFlipX(false);
+                setFlipY(false);
+                setCropPercent(100);
               }}
               className={`px-4 py-2 rounded-lg font-medium transition ${
                 activeImage === "original"
@@ -100,6 +179,9 @@ const PreviewModal = ({
                 setActiveImage("result");
                 setZoom(100);
                 setRotation(0);
+                setFlipX(false);
+                setFlipY(false);
+                setCropPercent(100);
               }}
               className={`px-4 py-2 rounded-lg font-medium transition ${
                 activeImage === "result"
@@ -146,9 +228,28 @@ const PreviewModal = ({
               </button>
 
               <button
+                onClick={() => setFlipX((prev) => !prev)}
+                className="text-xs font-medium px-3 py-1 bg-white hover:bg-gray-100 rounded-lg transition text-gray-600 border border-gray-200"
+                title="Flip Horizontal"
+              >
+                Flip H
+              </button>
+
+              <button
+                onClick={() => setFlipY((prev) => !prev)}
+                className="text-xs font-medium px-3 py-1 bg-white hover:bg-gray-100 rounded-lg transition text-gray-600 border border-gray-200"
+                title="Flip Vertical"
+              >
+                Flip V
+              </button>
+
+              <button
                 onClick={() => {
                   setZoom(100);
                   setRotation(0);
+                  setFlipX(false);
+                  setFlipY(false);
+                  setCropPercent(100);
                 }}
                 className="text-xs font-medium px-3 py-1 bg-white hover:bg-gray-100 rounded-lg transition text-gray-600 border border-gray-200"
               >
@@ -158,12 +259,12 @@ const PreviewModal = ({
 
             {/* Right: Download Button */}
             <Button
-              onClick={onDownload}
-              disabled={isDownloading}
+              onClick={handleEditedDownload}
+              disabled={isDownloading || preparingDownload}
               className="bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-400/50 rounded-lg font-medium flex items-center gap-2"
             >
               <Download className="w-4 h-4" />
-              {isDownloading ? "Downloading..." : "Download Result"}
+              {isDownloading || preparingDownload ? "Downloading..." : "Download Edited"}
             </Button>
           </div>
 
@@ -178,6 +279,19 @@ const PreviewModal = ({
               onChange={(e) => setZoom(Number(e.target.value))}
               className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
             />
+          </div>
+
+          <div className="mt-2 flex items-center gap-3">
+            <span className="text-xs text-gray-600 font-medium">Crop:</span>
+            <input
+              type="range"
+              min="50"
+              max="100"
+              value={cropPercent}
+              onChange={(e) => setCropPercent(Number(e.target.value))}
+              className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+            />
+            <span className="text-xs text-gray-600 font-medium min-w-10 text-right">{cropPercent}%</span>
           </div>
         </div>
       </div>

@@ -363,17 +363,26 @@ const UploadWorkspace = () => {
     }
   }, [batchFiles, batchProgress, toast]);
 
-  const handleDownload = useCallback(async (imageUrl: string, originalName: string, id = "current", format: ExportFormat = "png") => {
+  const handleDownload = useCallback(async (imageUrl: string | null, originalName: string, id = "current", format: ExportFormat = "png", sourceBlob?: Blob) => {
     setDownloadingId(id);
 
     try {
-      const imageResponse = await fetch(normalizeImageUrl(imageUrl));
-      if (!imageResponse.ok) {
-        throw new Error(`Download failed with status ${imageResponse.status}`);
+      let inputBlob = sourceBlob;
+
+      if (!inputBlob) {
+        if (!imageUrl) {
+          throw new Error("No image available to download.");
+        }
+
+        const imageResponse = await fetch(normalizeImageUrl(imageUrl));
+        if (!imageResponse.ok) {
+          throw new Error(`Download failed with status ${imageResponse.status}`);
+        }
+
+        inputBlob = await imageResponse.blob();
       }
 
-      const sourceBlob = await imageResponse.blob();
-      let blob = sourceBlob;
+      let blob = inputBlob;
 
       if (format !== "png") {
         const mime = EXPORT_FORMATS.find((item) => item.value === format)?.mime;
@@ -381,7 +390,7 @@ const UploadWorkspace = () => {
           throw new Error("Unsupported export format.");
         }
 
-        const bitmap = await createImageBitmap(sourceBlob);
+        const bitmap = await createImageBitmap(inputBlob);
         const canvas = document.createElement("canvas");
         canvas.width = bitmap.width;
         canvas.height = bitmap.height;
@@ -858,8 +867,8 @@ const UploadWorkspace = () => {
         originalImage={previewModalData?.original || ""}
         resultImage={previewModalData?.result || ""}
         originalName={previewModalData?.name || "image"}
-        onDownload={() => {
-          handleDownload(previewModalData?.result!, previewModalData?.name || "image", "current", exportFormat);
+        onDownload={(editedBlob) => {
+          handleDownload(previewModalData?.result || null, previewModalData?.name || "image", "current", exportFormat, editedBlob);
           setShowPreviewModal(false);
         }}
         isDownloading={downloadingId === "current"}
