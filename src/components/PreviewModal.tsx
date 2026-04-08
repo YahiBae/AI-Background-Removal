@@ -27,6 +27,12 @@ const PreviewModal = ({
   const [flipX, setFlipX] = useState(false);
   const [flipY, setFlipY] = useState(false);
   const [cropPercent, setCropPercent] = useState(100);
+  const [opacity, setOpacity] = useState(100);
+  const [blur, setBlur] = useState(0);
+  const [brightness, setBrightness] = useState(100);
+  const [contrast, setContrast] = useState(100);
+  const [saturation, setSaturation] = useState(100);
+  const [hueRotate, setHueRotate] = useState(0);
   const [preparingDownload, setPreparingDownload] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -45,6 +51,21 @@ const PreviewModal = ({
 
   const currentImage = activeImage === "original" ? originalImage : resultImage;
   const cropInset = Math.max(0, (100 - cropPercent) / 2);
+  const imageFilter = `blur(${blur}px) brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hueRotate}deg)`;
+
+  const resetEdits = () => {
+    setZoom(100);
+    setRotation(0);
+    setFlipX(false);
+    setFlipY(false);
+    setCropPercent(100);
+    setOpacity(100);
+    setBlur(0);
+    setBrightness(100);
+    setContrast(100);
+    setSaturation(100);
+    setHueRotate(0);
+  };
 
   const handleEditedDownload = async () => {
     setPreparingDownload(true);
@@ -73,6 +94,8 @@ const PreviewModal = ({
       baseCtx.translate(baseCanvas.width / 2, baseCanvas.height / 2);
       baseCtx.rotate((rotation * Math.PI) / 180);
       baseCtx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+      baseCtx.globalAlpha = opacity / 100;
+      baseCtx.filter = imageFilter;
       baseCtx.drawImage(bitmap, -bitmap.width / 2, -bitmap.height / 2, bitmap.width, bitmap.height);
       baseCtx.restore();
       bitmap.close();
@@ -150,6 +173,8 @@ const PreviewModal = ({
               style={{
                 transform: `scale(${zoom / 100}) rotate(${rotation}deg) scaleX(${flipX ? -1 : 1}) scaleY(${flipY ? -1 : 1})`,
                 clipPath: `inset(${cropInset}% ${cropInset}% ${cropInset}% ${cropInset}%)`,
+                opacity: opacity / 100,
+                filter: imageFilter,
                 transition: "transform 0.2s ease",
               }}
             />
@@ -160,11 +185,7 @@ const PreviewModal = ({
             <button
               onClick={() => {
                 setActiveImage("original");
-                setZoom(100);
-                setRotation(0);
-                setFlipX(false);
-                setFlipY(false);
-                setCropPercent(100);
+                resetEdits();
               }}
               className={`px-4 py-2 rounded-lg font-medium transition ${
                 activeImage === "original"
@@ -177,11 +198,7 @@ const PreviewModal = ({
             <button
               onClick={() => {
                 setActiveImage("result");
-                setZoom(100);
-                setRotation(0);
-                setFlipX(false);
-                setFlipY(false);
-                setCropPercent(100);
+                resetEdits();
               }}
               className={`px-4 py-2 rounded-lg font-medium transition ${
                 activeImage === "result"
@@ -244,13 +261,7 @@ const PreviewModal = ({
               </button>
 
               <button
-                onClick={() => {
-                  setZoom(100);
-                  setRotation(0);
-                  setFlipX(false);
-                  setFlipY(false);
-                  setCropPercent(100);
-                }}
+                onClick={resetEdits}
                 className="text-xs font-medium px-3 py-1 bg-white hover:bg-gray-100 rounded-lg transition text-gray-600 border border-gray-200"
               >
                 Reset
@@ -292,6 +303,78 @@ const PreviewModal = ({
               className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
             />
             <span className="text-xs text-gray-600 font-medium min-w-10 text-right">{cropPercent}%</span>
+          </div>
+
+          <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-600 font-medium min-w-16">Opacity</span>
+              <input
+                type="range"
+                min="10"
+                max="100"
+                value={opacity}
+                onChange={(e) => setOpacity(Number(e.target.value))}
+                className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-600 font-medium min-w-16">Blur</span>
+              <input
+                type="range"
+                min="0"
+                max="20"
+                value={blur}
+                onChange={(e) => setBlur(Number(e.target.value))}
+                className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-600 font-medium min-w-16">Brightness</span>
+              <input
+                type="range"
+                min="50"
+                max="150"
+                value={brightness}
+                onChange={(e) => setBrightness(Number(e.target.value))}
+                className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+              />
+            </div>
+          </div>
+
+          <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-600 font-medium min-w-16">Contrast</span>
+              <input
+                type="range"
+                min="50"
+                max="150"
+                value={contrast}
+                onChange={(e) => setContrast(Number(e.target.value))}
+                className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-600 font-medium min-w-16">Saturation</span>
+              <input
+                type="range"
+                min="0"
+                max="200"
+                value={saturation}
+                onChange={(e) => setSaturation(Number(e.target.value))}
+                className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-600 font-medium min-w-16">Hue</span>
+              <input
+                type="range"
+                min="0"
+                max="360"
+                value={hueRotate}
+                onChange={(e) => setHueRotate(Number(e.target.value))}
+                className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+              />
+            </div>
           </div>
         </div>
       </div>
