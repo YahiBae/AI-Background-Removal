@@ -19,10 +19,26 @@ type HistoryItem = {
   resultUrl: string;
 };
 
+type ExportFormat = "png" | "webp" | "jpeg" | "gif" | "tiff";
+
+const EXPORT_FORMATS: Array<{ value: ExportFormat; label: string; mime: string }> = [
+  { value: "png", label: "PNG", mime: "image/png" },
+  { value: "webp", label: "WEBP", mime: "image/webp" },
+  { value: "jpeg", label: "JPEG", mime: "image/jpeg" },
+  { value: "gif", label: "GIF", mime: "image/gif" },
+  { value: "tiff", label: "TIFF", mime: "image/tiff" },
+];
+
 const makeDownloadName = (originalName: string) => {
   const dotIndex = originalName.lastIndexOf(".");
   const base = dotIndex > 0 ? originalName.slice(0, dotIndex) : originalName;
   return `${base}-no-bg.png`;
+};
+
+const makeExportName = (originalName: string, format: ExportFormat) => {
+  const dotIndex = originalName.lastIndexOf(".");
+  const base = dotIndex > 0 ? originalName.slice(0, dotIndex) : originalName;
+  return `${base}-no-bg.${format === "jpeg" ? "jpg" : format}`;
 };
 
 const normalizeImageUrl = (url: string) => {
@@ -56,6 +72,7 @@ const UploadWorkspace = () => {
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [batchZipDownloading, setBatchZipDownloading] = useState(false);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("png");
   const [batchProgress, setBatchProgress] = useState<Record<string, { processed: boolean; url: string | null }>>({});
   const batchFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -346,28 +363,67 @@ const UploadWorkspace = () => {
     }
   }, [batchFiles, batchProgress, toast]);
 
-  const handleDownload = useCallback(async (imageUrl: string, originalName: string, id = "current") => {
+  const handleDownload = useCallback(async (imageUrl: string, originalName: string, id = "current", format: ExportFormat = "png") => {
     setDownloadingId(id);
 
     try {
-      const response = await fetch(normalizeImageUrl(imageUrl));
-      if (!response.ok) {
-        throw new Error(`Download failed with status ${response.status}`);
+      const imageResponse = await fetch(normalizeImageUrl(imageUrl));
+      if (!imageResponse.ok) {
+        throw new Error(`Download failed with status ${imageResponse.status}`);
       }
 
-      const blob = await response.blob();
+      const sourceBlob = await imageResponse.blob();
+      let blob = sourceBlob;
+
+      if (format !== "png") {
+        const mime = EXPORT_FORMATS.find((item) => item.value === format)?.mime;
+        if (!mime) {
+          throw new Error("Unsupported export format.");
+        }
+
+        const bitmap = await createImageBitmap(sourceBlob);
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+
+        const context = canvas.getContext("2d");
+        if (!context) {
+          bitmap.close();
+          throw new Error("Canvas export unavailable.");
+        }
+
+        context.drawImage(bitmap, 0, 0);
+        bitmap.close();
+
+        const convertedBlob = await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob(resolve, mime, 0.95);
+        });
+
+        if (!convertedBlob) {
+          throw new Error(`${format.toUpperCase()} export is not supported in this browser.`);
+        }
+
+        blob = convertedBlob;
+      }
+
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objectUrl;
-      a.download = makeDownloadName(originalName);
+      a.download = format === "png" ? makeDownloadName(originalName) : makeExportName(originalName, format);
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(objectUrl);
-    } catch {
+
+      toast({
+        title: "Downloaded",
+        description: `Saved as ${format.toUpperCase()}.`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not download automatically. Please try again.";
       toast({
         title: "Download failed",
-        description: "Could not download automatically. Please try again.",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -645,6 +701,20 @@ const UploadWorkspace = () => {
                 </Button>
               ) : (
                 <>
+                  <div className="flex items-center gap-2 rounded-xl border border-purple-200 px-3 py-2 bg-white/80">
+                    <span className="text-sm font-medium text-purple-700">Format</span>
+                    <select
+                      value={exportFormat}
+                      onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
+                      className="text-sm bg-transparent outline-none"
+                    >
+                      {EXPORT_FORMATS.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <Button
                     className="bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-400/50 rounded-xl px-8"
                     size="lg"
@@ -671,7 +741,7 @@ const UploadWorkspace = () => {
                   <Button
                     className="bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-400/50 rounded-xl px-8"
                     size="lg"
-                    onClick={() => handleDownload(result, file?.name ?? "image", "current")}
+                    onClick={() => handleDownload(result, file?.name ?? "image", "current", exportFormat)}
                     disabled={downloadingId === "current"}
                   >
                     {downloadingId === "current" ? (
@@ -679,7 +749,7 @@ const UploadWorkspace = () => {
                     ) : (
                       <Download className="w-4 h-4 mr-2" />
                     )}
-                    Download PNG
+                    Download {exportFormat.toUpperCase()}
                   </Button>
                   <Button variant="outline" size="lg" onClick={reset} className="rounded-xl px-8 border-purple-200 text-purple-700 hover:bg-purple-50">
                     Upload Another
@@ -692,9 +762,25 @@ const UploadWorkspace = () => {
           <div className="max-w-5xl mx-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold">Processing History</h2>
-              <Button variant="cta-outline" size="sm" onClick={clearHistory} disabled={historyItems.length === 0}>
-                Clear History
-              </Button>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 rounded-xl border border-purple-200 px-3 py-1.5 bg-white/80">
+                  <span className="text-xs font-medium text-purple-700">Format</span>
+                  <select
+                    value={exportFormat}
+                    onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
+                    className="text-xs bg-transparent outline-none"
+                  >
+                    {EXPORT_FORMATS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Button variant="cta-outline" size="sm" onClick={clearHistory} disabled={historyItems.length === 0}>
+                  Clear History
+                </Button>
+              </div>
             </div>
 
             {historyItems.length === 0 ? (
@@ -731,7 +817,7 @@ const UploadWorkspace = () => {
                         <Button
                           className="bg-gradient-to-r from-purple-600 to-pink-500 text-white"
                           size="sm"
-                          onClick={() => handleDownload(item.resultUrl, item.originalName, item.id)}
+                          onClick={() => handleDownload(item.resultUrl, item.originalName, item.id, exportFormat)}
                           disabled={downloadingId === item.id}
                         >
                           {downloadingId === item.id ? (
@@ -739,7 +825,7 @@ const UploadWorkspace = () => {
                           ) : (
                             <Download className="w-4 h-4 mr-2" />
                           )}
-                          Download
+                          {exportFormat.toUpperCase()}
                         </Button>
                       </div>
                     </div>
@@ -773,7 +859,7 @@ const UploadWorkspace = () => {
         resultImage={previewModalData?.result || ""}
         originalName={previewModalData?.name || "image"}
         onDownload={() => {
-          handleDownload(previewModalData?.result!, previewModalData?.name || "image", "current");
+          handleDownload(previewModalData?.result!, previewModalData?.name || "image", "current", exportFormat);
           setShowPreviewModal(false);
         }}
         isDownloading={downloadingId === "current"}
