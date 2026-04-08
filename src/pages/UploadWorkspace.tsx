@@ -7,6 +7,7 @@ import PreviewModal from "@/components/PreviewModal";
 import BackgroundReplacer from "@/components/BackgroundReplacer";
 import { useToast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
+import { trackProcessingEvent } from "@/lib/analytics";
 import {
   clearHistoryInDatabase,
   isHistoryDatabaseConfigured,
@@ -247,6 +248,7 @@ const UploadWorkspace = () => {
 
   const handleProcess = async () => {
     if (!file) return;
+    const startedAt = performance.now();
     setProcessing(true);
     setResult(null);
 
@@ -284,6 +286,14 @@ const UploadWorkspace = () => {
         void saveHistory([item, ...historyItems].slice(0, HISTORY_LIMIT));
       }
 
+      trackProcessingEvent({
+        fileName: file.name,
+        fileSizeBytes: file.size,
+        durationMs: Math.round(performance.now() - startedAt),
+        success: true,
+        mode: "single",
+      });
+
       void sendEmailNotification(
         "Background Removed Successfully",
         `Your image ${file.name} has finished processing and is ready to download.`,
@@ -291,6 +301,14 @@ const UploadWorkspace = () => {
 
       toast({ title: "Done!", description: "Background removed successfully." });
     } catch (error) {
+      trackProcessingEvent({
+        fileName: file.name,
+        fileSizeBytes: file.size,
+        durationMs: Math.round(performance.now() - startedAt),
+        success: false,
+        mode: "single",
+      });
+
       const message = error instanceof Error ? error.message : "Unable to process the image.";
       toast({ title: "Processing failed", description: message, variant: "destructive" });
     } finally {
@@ -341,6 +359,7 @@ const UploadWorkspace = () => {
     const processedProgress = { ...batchProgress };
 
     for (const file of batchFiles) {
+      const startedAt = performance.now();
       try {
         // Generate preview for batch file
         const preview = await new Promise<string>((resolve) => {
@@ -372,6 +391,14 @@ const UploadWorkspace = () => {
         processedProgress[file.name] = { processed: true, url: resultUrl };
         setBatchProgress({ ...processedProgress });
 
+        trackProcessingEvent({
+          fileName: file.name,
+          fileSizeBytes: file.size,
+          durationMs: Math.round(performance.now() - startedAt),
+          success: true,
+          mode: "batch",
+        });
+
         // Add to history
         const historyItem: HistoryItem = {
           id: crypto.randomUUID(),
@@ -383,6 +410,13 @@ const UploadWorkspace = () => {
         newHistoryItems.push(historyItem);
       } catch (error) {
         console.error(`Failed to process ${file.name}:`, error);
+        trackProcessingEvent({
+          fileName: file.name,
+          fileSizeBytes: file.size,
+          durationMs: Math.round(performance.now() - startedAt),
+          success: false,
+          mode: "batch",
+        });
         processedProgress[file.name] = { processed: false, url: null };
         setBatchProgress({ ...processedProgress });
       }
