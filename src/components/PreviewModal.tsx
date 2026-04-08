@@ -1,0 +1,188 @@
+import { useEffect, useRef, useState } from "react";
+import { X, ZoomIn, ZoomOut, RotateCw, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+interface PreviewModalProps {
+  originalImage: string;
+  resultImage: string;
+  originalName: string;
+  isOpen: boolean;
+  onClose: () => void;
+  onDownload: () => void;
+  isDownloading: boolean;
+}
+
+const PreviewModal = ({
+  originalImage,
+  resultImage,
+  originalName,
+  isOpen,
+  onClose,
+  onDownload,
+  isDownloading,
+}: PreviewModalProps) => {
+  const [zoom, setZoom] = useState(100);
+  const [activeImage, setActiveImage] = useState<"original" | "result">("result");
+  const [rotation, setRotation] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+    return () => {
+      document.body.style.overflow = "auto";
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const currentImage = activeImage === "original" ? originalImage : resultImage;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="border-b border-purple-100 p-4 flex items-center justify-between">
+          <h2 className="text-lg font-heading font-bold text-gray-900">Image Preview</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {/* Image Display */}
+          <div
+            ref={containerRef}
+            className="flex-1 overflow-auto bg-gray-50 flex items-center justify-center relative"
+            style={{
+              backgroundImage:
+                "repeating-conic-gradient(#f3f4f6 0% 25%, #e5e7eb 0% 50%)",
+              backgroundSize: "16px 16px",
+            }}
+          >
+            <img
+              src={currentImage}
+              alt={activeImage === "original" ? "Original" : "Result"}
+              className="object-contain"
+              style={{
+                zoom: `${zoom}%`,
+                transform: `rotate(${rotation}deg)`,
+                transition: "transform 0.2s ease",
+              }}
+            />
+          </div>
+
+          {/* Tabs */}
+          <div className="border-t border-purple-100 bg-white p-3 flex gap-2">
+            <button
+              onClick={() => {
+                setActiveImage("original");
+                setZoom(100);
+                setRotation(0);
+              }}
+              className={`px-4 py-2 rounded-lg font-medium transition ${
+                activeImage === "original"
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Original
+            </button>
+            <button
+              onClick={() => {
+                setActiveImage("result");
+                setZoom(100);
+                setRotation(0);
+              }}
+              className={`px-4 py-2 rounded-lg font-medium transition ${
+                activeImage === "result"
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Result
+            </button>
+          </div>
+        </div>
+
+        {/* Footer Controls */}
+        <div className="border-t border-purple-100 p-4 bg-gray-50">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            {/* Left: Zoom & Rotation Controls */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setZoom(Math.max(50, zoom - 10))}
+                className="p-2 hover:bg-white rounded-lg transition text-gray-600"
+                title="Zoom Out"
+              >
+                <ZoomOut className="w-5 h-5" />
+              </button>
+
+              <div className="bg-white rounded-lg px-3 py-1 border border-purple-200 text-sm font-medium min-w-12 text-center">
+                {zoom}%
+              </div>
+
+              <button
+                onClick={() => setZoom(Math.min(200, zoom + 10))}
+                className="p-2 hover:bg-white rounded-lg transition text-gray-600"
+                title="Zoom In"
+              >
+                <ZoomIn className="w-5 h-5" />
+              </button>
+
+              <button
+                onClick={() => setRotation((prev) => (prev + 90) % 360)}
+                className="p-2 hover:bg-white rounded-lg transition text-gray-600 ml-2"
+                title="Rotate 90°"
+              >
+                <RotateCw className="w-5 h-5" />
+              </button>
+
+              <button
+                onClick={() => {
+                  setZoom(100);
+                  setRotation(0);
+                }}
+                className="text-xs font-medium px-3 py-1 bg-white hover:bg-gray-100 rounded-lg transition text-gray-600 border border-gray-200"
+              >
+                Reset
+              </button>
+            </div>
+
+            {/* Right: Download Button */}
+            <Button
+              onClick={onDownload}
+              disabled={isDownloading}
+              className="bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-400/50 rounded-lg font-medium flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              {isDownloading ? "Downloading..." : "Download Result"}
+            </Button>
+          </div>
+
+          {/* Zoom Slider */}
+          <div className="mt-3 flex items-center gap-3">
+            <span className="text-xs text-gray-600 font-medium">Zoom Level:</span>
+            <input
+              type="range"
+              min="50"
+              max="200"
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default PreviewModal;

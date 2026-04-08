@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Upload, X, Download, Loader2, ImageIcon, History } from "lucide-react";
+import { Upload, X, Download, Loader2, ImageIcon, History, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
+import PreviewModal from "@/components/PreviewModal";
 import { useToast } from "@/hooks/use-toast";
 
 const WEBHOOK_URL = "https://sagarpun.app.n8n.cloud/webhook/remove-background";
@@ -43,6 +44,12 @@ const UploadWorkspace = () => {
   const [dragOver, setDragOver] = useState(false);
   const [activeTab, setActiveTab] = useState<"workspace" | "history">("workspace");
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewModalData, setPreviewModalData] = useState<{
+    original: string;
+    result: string;
+    name: string;
+  } | null>(null);
   const { toast } = useToast();
 
   const MAX_SIZE = 10 * 1024 * 1024;
@@ -342,9 +349,23 @@ const UploadWorkspace = () => {
               ) : (
                 <>
                   <Button
-                    variant="cta"
+                    className="bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-400/50 rounded-xl px-8"
                     size="lg"
-                    className="rounded-xl px-8"
+                    onClick={() => {
+                      setPreviewModalData({
+                        original: preview!,
+                        result: result!,
+                        name: file?.name || "image",
+                      });
+                      setShowPreviewModal(true);
+                    }}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    Preview
+                  </Button>
+                  <Button
+                    className="bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-400/50 rounded-xl px-8"
+                    size="lg"
                     onClick={() => handleDownload(result, file?.name ?? "image", "current")}
                     disabled={downloadingId === "current"}
                   >
@@ -355,7 +376,7 @@ const UploadWorkspace = () => {
                     )}
                     Download PNG
                   </Button>
-                  <Button variant="cta-outline" size="lg" onClick={reset} className="rounded-xl px-8">
+                  <Button variant="outline" size="lg" onClick={reset} className="rounded-xl px-8 border-purple-200 text-purple-700 hover:bg-purple-50">
                     Upload Another
                   </Button>
                 </>
@@ -386,19 +407,36 @@ const UploadWorkspace = () => {
                         <p className="text-sm font-medium">{item.originalName}</p>
                         <p className="text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</p>
                       </div>
-                      <Button
-                        variant="cta"
-                        size="sm"
-                        onClick={() => handleDownload(item.resultUrl, item.originalName, item.id)}
-                        disabled={downloadingId === item.id}
-                      >
-                        {downloadingId === item.id ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <Download className="w-4 h-4 mr-2" />
-                        )}
-                        Download
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setPreviewModalData({
+                              original: item.originalPreview,
+                              result: item.resultUrl,
+                              name: item.originalName,
+                            });
+                            setShowPreviewModal(true);
+                          }}
+                          className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          className="bg-gradient-to-r from-purple-600 to-pink-500 text-white"
+                          size="sm"
+                          onClick={() => handleDownload(item.resultUrl, item.originalName, item.id)}
+                          disabled={downloadingId === item.id}
+                        >
+                          {downloadingId === item.id ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Download className="w-4 h-4 mr-2" />
+                          )}
+                          Download
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="grid sm:grid-cols-2 gap-4">
@@ -422,6 +460,19 @@ const UploadWorkspace = () => {
           </div>
         )}
       </div>
+
+      <PreviewModal
+        isOpen={showPreviewModal && !!previewModalData}
+        onClose={() => setShowPreviewModal(false)}
+        originalImage={previewModalData?.original || ""}
+        resultImage={previewModalData?.result || ""}
+        originalName={previewModalData?.name || "image"}
+        onDownload={() => {
+          handleDownload(previewModalData?.result!, previewModalData?.name || "image", "current");
+          setShowPreviewModal(false);
+        }}
+        isDownloading={downloadingId === "current"}
+      />
     </div>
   );
 };
