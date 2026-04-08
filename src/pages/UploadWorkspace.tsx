@@ -6,6 +6,13 @@ import Navbar from "@/components/Navbar";
 import PreviewModal from "@/components/PreviewModal";
 import BackgroundReplacer from "@/components/BackgroundReplacer";
 import { useToast } from "@/hooks/use-toast";
+import { getCurrentUser } from "@/lib/auth";
+import {
+  clearHistoryInDatabase,
+  isHistoryDatabaseConfigured,
+  loadHistoryFromDatabase,
+  saveHistoryToDatabase,
+} from "@/lib/historyDatabase";
 
 const WEBHOOK_URL = "https://sagarpun.app.n8n.cloud/webhook/remove-background";
 const HISTORY_STORAGE_KEY = "snap-background-history";
@@ -53,6 +60,8 @@ const normalizeImageUrl = (url: string) => {
 };
 
 const UploadWorkspace = () => {
+  const currentUser = getCurrentUser();
+  const ownerEmail = currentUser?.email ?? "guest@snapcut.local";
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -81,27 +90,78 @@ const UploadWorkspace = () => {
   const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as HistoryItem[];
-      if (Array.isArray(parsed)) {
-        const normalized = parsed.map((item) => ({
-          ...item,
-          resultUrl: normalizeImageUrl(String(item.resultUrl)),
-        }));
-        setHistoryItems(normalized);
-        window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(normalized));
-      }
-    } catch {
-      toast({ title: "History reset", description: "Could not load saved history.", variant: "destructive" });
-    }
-  }, [toast]);
+    let cancelled = false;
 
-  const saveHistory = useCallback((items: HistoryItem[]) => {
+    const loadHistory = async () => {
+      let loadedFromDatabase = false;
+
+      if (isHistoryDatabaseConfigured()) {
+        try {
+          const remoteItems = await loadHistoryFromDatabase(ownerEmail, HISTORY_LIMIT);
+          if (!cancelled && remoteItems.length > 0) {
+            const normalizedRemote = remoteItems.map((item) => ({
+              ...item,
+              resultUrl: normalizeImageUrl(String(item.resultUrl)),
+            }));
+            setHistoryItems(normalizedRemote);
+            window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(normalizedRemote));
+            loadedFromDatabase = true;
+          }
+        } catch {
+          toast({
+            title: "Database unavailable",
+            description: "Using local history cache for now.",
+            variant: "destructive",
+          });
+        }
+      }
+
+      if (loadedFromDatabase) {
+        return;
+      }
+
+      try {
+        const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as HistoryItem[];
+        if (Array.isArray(parsed)) {
+          const normalized = parsed.map((item) => ({
+            ...item,
+            resultUrl: normalizeImageUrl(String(item.resultUrl)),
+          }));
+          if (!cancelled) {
+            setHistoryItems(normalized);
+            window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(normalized));
+          }
+        }
+      } catch {
+        toast({ title: "History reset", description: "Could not load saved history.", variant: "destructive" });
+      }
+    };
+
+    void loadHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerEmail, toast]);
+
+  const saveHistory = useCallback(async (items: HistoryItem[]) => {
     setHistoryItems(items);
     window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(items));
-  }, []);
+
+    if (isHistoryDatabaseConfigured()) {
+      try {
+        await saveHistoryToDatabase(ownerEmail, items);
+      } catch {
+        toast({
+          title: "Database sync failed",
+          description: "Saved locally; cloud sync will retry on next update.",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [ownerEmail, toast]);
 
   const handleFile = useCallback((f: File) => {
     if (!ALLOWED.includes(f.type)) {
@@ -187,7 +247,7 @@ const UploadWorkspace = () => {
           originalPreview: preview,
           resultUrl,
         };
-        saveHistory([item, ...historyItems].slice(0, HISTORY_LIMIT));
+        void saveHistory([item, ...historyItems].slice(0, HISTORY_LIMIT));
       }
 
       toast({ title: "Done!", description: "Background removed successfully." });
@@ -291,7 +351,7 @@ const UploadWorkspace = () => {
 
     // Save all to history
     if (newHistoryItems.length > 0) {
-      saveHistory([...newHistoryItems, ...historyItems].slice(0, HISTORY_LIMIT));
+      void saveHistory([...newHistoryItems, ...historyItems].slice(0, HISTORY_LIMIT));
       toast({
         title: "Batch complete!",
         description: `${newHistoryItems.length}/${batchFiles.length} images processed successfully.`,
@@ -459,9 +519,22 @@ const UploadWorkspace = () => {
     [toast]
   );
 
-  const clearHistory = () => {
+  const clearHistory = async () => {
     window.localStorage.removeItem(HISTORY_STORAGE_KEY);
     setHistoryItems([]);
+
+    if (isHistoryDatabaseConfigured()) {
+      try {
+        await clearHistoryInDatabase(ownerEmail);
+      } catch {
+        toast({
+          title: "Cloud clear failed",
+          description: "Local history cleared, but cloud records could not be removed.",
+          variant: "destructive",
+        });
+      }
+    }
+
     toast({ title: "History cleared", description: "Saved uploads were removed." });
   };
 
