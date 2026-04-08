@@ -15,6 +15,7 @@ import {
 } from "@/lib/historyDatabase";
 
 const WEBHOOK_URL = "https://sagarpun.app.n8n.cloud/webhook/remove-background";
+const NOTIFY_API_URL = "/api/v1/notify";
 const HISTORY_STORAGE_KEY = "snap-background-history";
 const HISTORY_LIMIT = 30;
 
@@ -82,6 +83,8 @@ const UploadWorkspace = () => {
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [batchZipDownloading, setBatchZipDownloading] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("png");
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(false);
+  const [notificationEmail, setNotificationEmail] = useState(ownerEmail === "guest@snapcut.local" ? "" : ownerEmail);
   const [batchProgress, setBatchProgress] = useState<Record<string, { processed: boolean; url: string | null }>>({});
   const batchFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -162,6 +165,37 @@ const UploadWorkspace = () => {
       }
     }
   }, [ownerEmail, toast]);
+
+  const sendEmailNotification = useCallback(async (subject: string, message: string) => {
+    const email = notificationEmail.trim().toLowerCase();
+    if (!emailNotificationsEnabled || !email) {
+      return;
+    }
+
+    try {
+      const response = await fetch(NOTIFY_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: email,
+          subject,
+          message,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Notification request failed (${response.status})`);
+      }
+    } catch {
+      toast({
+        title: "Email notification failed",
+        description: "Processing finished, but email could not be sent.",
+        variant: "destructive",
+      });
+    }
+  }, [emailNotificationsEnabled, notificationEmail, toast]);
 
   const handleFile = useCallback((f: File) => {
     if (!ALLOWED.includes(f.type)) {
@@ -249,6 +283,11 @@ const UploadWorkspace = () => {
         };
         void saveHistory([item, ...historyItems].slice(0, HISTORY_LIMIT));
       }
+
+      void sendEmailNotification(
+        "Background Removed Successfully",
+        `Your image ${file.name} has finished processing and is ready to download.`,
+      );
 
       toast({ title: "Done!", description: "Background removed successfully." });
     } catch (error) {
@@ -356,6 +395,11 @@ const UploadWorkspace = () => {
         title: "Batch complete!",
         description: `${newHistoryItems.length}/${batchFiles.length} images processed successfully.`,
       });
+
+      void sendEmailNotification(
+        "Batch Processing Complete",
+        `${newHistoryItems.length} of ${batchFiles.length} images finished background removal.`,
+      );
     }
 
     setBatchProcessing(false);
@@ -580,6 +624,32 @@ const UploadWorkspace = () => {
               <History className="w-4 h-4" />
               History ({historyItems.length})
             </button>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto mb-6">
+          <div className="glass-card rounded-xl px-4 py-3 flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setEmailNotificationsEnabled((prev) => !prev)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                  emailNotificationsEnabled ? "bg-purple-600 text-white" : "bg-gray-200 text-gray-700"
+                }`}
+              >
+                {emailNotificationsEnabled ? "Email Alerts On" : "Email Alerts Off"}
+              </button>
+              <span className="text-xs text-muted-foreground">Get notified when processing completes</span>
+            </div>
+
+            <input
+              type="email"
+              value={notificationEmail}
+              onChange={(event) => setNotificationEmail(event.target.value)}
+              placeholder="name@company.com"
+              className="flex-1 rounded-lg border border-purple-200 bg-white/90 px-3 py-2 text-sm outline-none"
+              disabled={!emailNotificationsEnabled}
+            />
           </div>
         </div>
 

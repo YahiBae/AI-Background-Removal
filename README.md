@@ -70,11 +70,28 @@ Payload:
 
 Clears all history rows for a user.
 
+### `POST /api/v1/notify`
+
+Sends completion emails for processing workflows.
+
+Payload:
+
+```json
+{
+	"to": "user@example.com",
+	"subject": "Background Removed Successfully",
+	"message": "Your image is ready to download."
+}
+```
+
 ### API Environment Variables
 
 - `REMOVE_BG_WEBHOOK_URL`: Optional override for the remove-background webhook.
 - `API_SECRET_KEY`: Optional API key required in `x-api-key` header.
 - `API_ALLOWED_ORIGIN`: Optional CORS allow-origin value (defaults to `*`).
+- `EMAIL_PROVIDER_WEBHOOK_URL`: Optional webhook for custom email provider.
+- `RESEND_API_KEY`: Used when webhook is not configured.
+- `EMAIL_FROM`: Sender email for Resend mode (e.g. `SnapBackground <noreply@yourdomain.com>`).
 - `SUPABASE_URL` or `VITE_SUPABASE_URL`: Supabase project URL.
 - `SUPABASE_ANON_KEY` or `VITE_SUPABASE_ANON_KEY`: Supabase anon key.
 
