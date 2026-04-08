@@ -333,9 +333,6 @@ const UploadWorkspace = () => {
     },
     [toast]
   );
-      setDownloadingId(null);
-    }
-  }, [toast]);
 
   const clearHistory = () => {
     window.localStorage.removeItem(HISTORY_STORAGE_KEY);
@@ -571,7 +568,6 @@ const UploadWorkspace = () => {
                 </Button>
               ) : (
                 <>
-                  <>
                   <Button
                     className="bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-400/50 rounded-xl px-8"
                     size="lg"
