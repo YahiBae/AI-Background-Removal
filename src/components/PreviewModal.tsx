@@ -2,6 +2,24 @@ import { useEffect, useRef, useState } from "react";
 import { X, ZoomIn, ZoomOut, RotateCw, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+type SocialPreset = {
+  key: string;
+  label: string;
+  width: number;
+  height: number;
+};
+
+const SOCIAL_PRESETS: SocialPreset[] = [
+  { key: "original", label: "Original Size", width: 0, height: 0 },
+  { key: "instagram-post", label: "Instagram Post (1080 x 1080)", width: 1080, height: 1080 },
+  { key: "instagram-story", label: "Instagram Story (1080 x 1920)", width: 1080, height: 1920 },
+  { key: "youtube-thumb", label: "YouTube Thumbnail (1280 x 720)", width: 1280, height: 720 },
+  { key: "linkedin-post", label: "LinkedIn Post (1200 x 627)", width: 1200, height: 627 },
+  { key: "facebook-post", label: "Facebook Post (1200 x 630)", width: 1200, height: 630 },
+  { key: "x-post", label: "X Post (1600 x 900)", width: 1600, height: 900 },
+  { key: "tiktok-cover", label: "TikTok Cover (1080 x 1920)", width: 1080, height: 1920 },
+];
+
 interface PreviewModalProps {
   originalImage: string;
   resultImage: string;
@@ -33,6 +51,7 @@ const PreviewModal = ({
   const [contrast, setContrast] = useState(100);
   const [saturation, setSaturation] = useState(100);
   const [hueRotate, setHueRotate] = useState(0);
+  const [socialPresetKey, setSocialPresetKey] = useState("original");
   const [preparingDownload, setPreparingDownload] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -50,6 +69,7 @@ const PreviewModal = ({
   if (!isOpen) return null;
 
   const currentImage = activeImage === "original" ? originalImage : resultImage;
+  const selectedPreset = SOCIAL_PRESETS.find((preset) => preset.key === socialPresetKey) ?? SOCIAL_PRESETS[0];
   const cropInset = Math.max(0, (100 - cropPercent) / 2);
   const imageFilter = `blur(${blur}px) brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hueRotate}deg)`;
 
@@ -65,6 +85,7 @@ const PreviewModal = ({
     setContrast(100);
     setSaturation(100);
     setHueRotate(0);
+    setSocialPresetKey("original");
   };
 
   const handleEditedDownload = async () => {
@@ -127,9 +148,31 @@ const PreviewModal = ({
         cropWidth,
         cropHeight,
       );
+      let exportCanvas = outputCanvas;
+
+      if (selectedPreset.width > 0 && selectedPreset.height > 0) {
+        const socialCanvas = document.createElement("canvas");
+        socialCanvas.width = selectedPreset.width;
+        socialCanvas.height = selectedPreset.height;
+        const socialCtx = socialCanvas.getContext("2d");
+
+        if (socialCtx) {
+          const scale = Math.min(
+            selectedPreset.width / outputCanvas.width,
+            selectedPreset.height / outputCanvas.height,
+          );
+          const drawWidth = Math.round(outputCanvas.width * scale);
+          const drawHeight = Math.round(outputCanvas.height * scale);
+          const offsetX = Math.round((selectedPreset.width - drawWidth) / 2);
+          const offsetY = Math.round((selectedPreset.height - drawHeight) / 2);
+
+          socialCtx.drawImage(outputCanvas, offsetX, offsetY, drawWidth, drawHeight);
+          exportCanvas = socialCanvas;
+        }
+      }
 
       const editedBlob = await new Promise<Blob | null>((resolve) => {
-        outputCanvas.toBlob(resolve, "image/png");
+        exportCanvas.toBlob(resolve, "image/png");
       });
 
       onDownload(editedBlob ?? undefined);
@@ -303,6 +346,21 @@ const PreviewModal = ({
               className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
             />
             <span className="text-xs text-gray-600 font-medium min-w-10 text-right">{cropPercent}%</span>
+          </div>
+
+          <div className="mt-2 flex items-center gap-3">
+            <span className="text-xs text-gray-600 font-medium min-w-28">Social Size:</span>
+            <select
+              value={socialPresetKey}
+              onChange={(event) => setSocialPresetKey(event.target.value)}
+              className="flex-1 rounded-lg border border-purple-200 bg-white px-2 py-1 text-xs text-gray-700 outline-none"
+            >
+              {SOCIAL_PRESETS.map((preset) => (
+                <option key={preset.key} value={preset.key}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
