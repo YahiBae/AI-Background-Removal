@@ -2,6 +2,82 @@
 
 Frontend app for background removal with editing, batch processing, and downloadable export workflows.
 
+## Developer API Endpoints (Feature #12)
+
+Serverless endpoints are available under `/api/v1` for external integrations.
+
+### `GET /api/v1/health`
+
+Returns API uptime metadata.
+
+Example response:
+
+```json
+{
+	"status": "ok",
+	"service": "snap-background-api",
+	"timestamp": "2026-04-08T12:34:56.000Z"
+}
+```
+
+### `POST /api/v1/remove-background`
+
+Forwards binary image input to background-removal pipeline.
+
+Headers:
+- `Content-Type`: image mime type (e.g. `image/png`)
+- `X-File-Name`: optional original filename
+- `x-api-key`: optional, required only when `API_SECRET_KEY` is configured
+
+Body:
+- Raw binary image bytes
+
+Example with curl:
+
+```bash
+curl -X POST "https://YOUR_DOMAIN/api/v1/remove-background" \
+	-H "Content-Type: image/png" \
+	-H "X-File-Name: product.png" \
+	--data-binary "@./product.png"
+```
+
+### `GET /api/v1/history?ownerEmail=...&limit=30`
+
+Fetches persisted history rows for a user.
+
+### `POST /api/v1/history`
+
+Replaces all history rows for a user.
+
+Payload:
+
+```json
+{
+	"ownerEmail": "user@example.com",
+	"items": [
+		{
+			"id": "uuid",
+			"createdAt": "2026-04-08T12:00:00.000Z",
+			"originalName": "photo.png",
+			"originalPreview": "data:image/png;base64,...",
+			"resultUrl": "https://..."
+		}
+	]
+}
+```
+
+### `DELETE /api/v1/history?ownerEmail=...`
+
+Clears all history rows for a user.
+
+### API Environment Variables
+
+- `REMOVE_BG_WEBHOOK_URL`: Optional override for the remove-background webhook.
+- `API_SECRET_KEY`: Optional API key required in `x-api-key` header.
+- `API_ALLOWED_ORIGIN`: Optional CORS allow-origin value (defaults to `*`).
+- `SUPABASE_URL` or `VITE_SUPABASE_URL`: Supabase project URL.
+- `SUPABASE_ANON_KEY` or `VITE_SUPABASE_ANON_KEY`: Supabase anon key.
+
 ## Real Database Setup (Feature #11)
 
 This project now supports cloud history persistence using Supabase.
