@@ -27,6 +27,19 @@ interface PreviewModalProps {
   resultImage: string;
   originalName: string;
   isOpen: boolean;
+  aiSuggestion?: {
+    socialPresetKey: string;
+    watermarkEnabled: boolean;
+    watermarkText: string;
+    filters: {
+      blur: number;
+      brightness: number;
+      contrast: number;
+      saturation: number;
+      hueRotate: number;
+      opacity: number;
+    };
+  } | null;
   onClose: () => void;
   onDownload: (editedBlob?: Blob) => void;
   isDownloading: boolean;
@@ -37,6 +50,7 @@ const PreviewModal = ({
   resultImage,
   originalName,
   isOpen,
+  aiSuggestion,
   onClose,
   onDownload,
   isDownloading,
@@ -114,6 +128,22 @@ const PreviewModal = ({
     setWatermarkOpacity(35);
     setWatermarkSize(5);
     setWatermarkPosition("bottom-right");
+  };
+
+  const applyAiSuggestion = () => {
+    if (!aiSuggestion) {
+      return;
+    }
+
+    setSocialPresetKey(aiSuggestion.socialPresetKey || "original");
+    setWatermarkEnabled(Boolean(aiSuggestion.watermarkEnabled));
+    setWatermarkText(aiSuggestion.watermarkText || "SnapBackground Enterprise");
+    setBlur(aiSuggestion.filters?.blur ?? 0);
+    setBrightness(aiSuggestion.filters?.brightness ?? 100);
+    setContrast(aiSuggestion.filters?.contrast ?? 100);
+    setSaturation(aiSuggestion.filters?.saturation ?? 100);
+    setHueRotate(aiSuggestion.filters?.hueRotate ?? 0);
+    setOpacity(aiSuggestion.filters?.opacity ?? 100);
   };
 
   const handleEditedDownload = async () => {
@@ -343,6 +373,15 @@ const PreviewModal = ({
           <div className="flex items-center justify-between flex-wrap gap-3">
             {/* Left: Zoom & Rotation Controls */}
             <div className="flex items-center gap-2">
+              {aiSuggestion ? (
+                <button
+                  onClick={applyAiSuggestion}
+                  className="text-xs font-medium px-3 py-1 bg-fuchsia-100 hover:bg-fuchsia-200 rounded-lg transition text-fuchsia-700 border border-fuchsia-200"
+                >
+                  Apply AI Suggestion
+                </button>
+              ) : null}
+
               <button
                 onClick={() => setZoom(Math.max(50, zoom - 10))}
                 className="p-2 hover:bg-white rounded-lg transition text-gray-600"

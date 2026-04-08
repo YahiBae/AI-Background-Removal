@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Upload, X, Download, Loader2, ImageIcon, History, Eye, Palette } from "lucide-react";
+import { Upload, X, Download, Loader2, ImageIcon, History, Eye, Palette, Sparkles } from "lucide-react";
 import JSZip from "jszip";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
@@ -17,6 +17,7 @@ import {
 
 const WEBHOOK_URL = "https://sagarpun.app.n8n.cloud/webhook/remove-background";
 const NOTIFY_API_URL = "/api/v1/notify";
+const AI_SUGGEST_API_URL = "/api/v1/suggestions";
 const HISTORY_STORAGE_KEY = "snap-background-history";
 const HISTORY_LIMIT = 30;
 
@@ -29,6 +30,23 @@ type HistoryItem = {
 };
 
 type ExportFormat = "png" | "webp" | "jpeg" | "gif" | "tiff";
+
+type AiSuggestion = {
+  title: string;
+  reason: string;
+  exportFormat: ExportFormat;
+  socialPresetKey: string;
+  watermarkEnabled: boolean;
+  watermarkText: string;
+  filters: {
+    blur: number;
+    brightness: number;
+    contrast: number;
+    saturation: number;
+    hueRotate: number;
+    opacity: number;
+  };
+};
 
 const EXPORT_FORMATS: Array<{ value: ExportFormat; label: string; mime: string }> = [
   { value: "png", label: "PNG", mime: "image/png" },
@@ -84,6 +102,8 @@ const UploadWorkspace = () => {
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [batchZipDownloading, setBatchZipDownloading] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("png");
+  const [aiSuggestion, setAiSuggestion] = useState<AiSuggestion | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(false);
   const [notificationEmail, setNotificationEmail] = useState(ownerEmail === "guest@snapcut.local" ? "" : ownerEmail);
   const [batchProgress, setBatchProgress] = useState<Record<string, { processed: boolean; url: string | null }>>({});
@@ -209,11 +229,58 @@ const UploadWorkspace = () => {
     }
     setFile(f);
     setResult(null);
+    setAiSuggestion(null);
     const reader = new FileReader();
     reader.onload = (e) => setPreview(e.target?.result as string);
     reader.readAsDataURL(f);
     return true;
   }, [toast]);
+
+  const fetchAiSuggestion = useCallback(async (selectedFile: File) => {
+    setSuggestionLoading(true);
+    try {
+      const tempUrl = URL.createObjectURL(selectedFile);
+      const dimensions = await new Promise<{ width: number; height: number }>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        img.onerror = () => resolve({ width: 1024, height: 1024 });
+        img.src = tempUrl;
+      });
+      URL.revokeObjectURL(tempUrl);
+
+      const response = await fetch(AI_SUGGEST_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fileName: selectedFile.name,
+          width: dimensions.width,
+          height: dimensions.height,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Suggestion request failed (${response.status})`);
+      }
+
+      const payload = await response.json();
+      if (payload?.suggestion) {
+        setAiSuggestion(payload.suggestion as AiSuggestion);
+      }
+    } catch {
+      setAiSuggestion(null);
+    } finally {
+      setSuggestionLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!file) {
+      return;
+    }
+    void fetchAiSuggestion(file);
+  }, [file, fetchAiSuggestion]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -879,6 +946,45 @@ const UploadWorkspace = () => {
               </div>
             </div>
 
+            <div className="glass-card rounded-2xl p-4 mt-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-purple-700 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" />
+                    AI Background Suggestions
+                  </p>
+                  {suggestionLoading ? (
+                    <p className="text-xs text-muted-foreground mt-1">Analyzing image context...</p>
+                  ) : aiSuggestion ? (
+                    <>
+                      <p className="text-sm font-medium mt-1">{aiSuggestion.title}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{aiSuggestion.reason}</p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">Upload an image to get smart recommendations.</p>
+                  )}
+                </div>
+
+                {aiSuggestion ? (
+                  <Button
+                    size="sm"
+                    className="bg-gradient-to-r from-fuchsia-600 to-indigo-500 text-white"
+                    onClick={() => setExportFormat(aiSuggestion.exportFormat)}
+                  >
+                    Apply Format
+                  </Button>
+                ) : null}
+              </div>
+
+              {aiSuggestion ? (
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-800">Format: {aiSuggestion.exportFormat.toUpperCase()}</span>
+                  <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-800">Preset: {aiSuggestion.socialPresetKey}</span>
+                  <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-800">Watermark: {aiSuggestion.watermarkEnabled ? "On" : "Off"}</span>
+                </div>
+              ) : null}
+            </div>
+
             <div className="flex justify-center gap-4 mt-6">
               {!result ? (
                 <Button variant="cta" size="lg" onClick={handleProcess} disabled={processing} className="rounded-xl px-8">
@@ -1044,6 +1150,7 @@ const UploadWorkspace = () => {
         originalImage={previewModalData?.original || ""}
         resultImage={previewModalData?.result || ""}
         originalName={previewModalData?.name || "image"}
+        aiSuggestion={aiSuggestion}
         onDownload={(editedBlob) => {
           handleDownload(previewModalData?.result || null, previewModalData?.name || "image", "current", exportFormat, editedBlob);
           setShowPreviewModal(false);

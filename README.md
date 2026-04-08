@@ -84,6 +84,44 @@ Payload:
 }
 ```
 
+### `POST /api/v1/suggestions`
+
+Returns AI-powered editing suggestions based on file metadata.
+
+Payload:
+
+```json
+{
+	"fileName": "portrait-session.jpg",
+	"width": 1080,
+	"height": 1350
+}
+```
+
+Example response:
+
+```json
+{
+	"success": true,
+	"suggestion": {
+		"title": "Portrait Highlight",
+		"reason": "Detected portrait/headshot naming.",
+		"exportFormat": "png",
+		"socialPresetKey": "instagram-story",
+		"watermarkEnabled": false,
+		"watermarkText": "SnapBackground Enterprise",
+		"filters": {
+			"blur": 0,
+			"brightness": 106,
+			"contrast": 104,
+			"saturation": 110,
+			"hueRotate": 0,
+			"opacity": 100
+		}
+	}
+}
+```
+
 ### API Environment Variables
 
 - `REMOVE_BG_WEBHOOK_URL`: Optional override for the remove-background webhook.
