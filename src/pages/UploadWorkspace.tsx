@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Upload, X, Download, Loader2, ImageIcon, History, Eye, Palette } from "lucide-react";
+import JSZip from "jszip";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import PreviewModal from "@/components/PreviewModal";
@@ -54,6 +55,7 @@ const UploadWorkspace = () => {
   const [showBackgroundReplacer, setShowBackgroundReplacer] = useState(false);
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [batchProcessing, setBatchProcessing] = useState(false);
+  const [batchZipDownloading, setBatchZipDownloading] = useState(false);
   const [batchProgress, setBatchProgress] = useState<Record<string, { processed: boolean; url: string | null }>>({});
   const batchFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -277,14 +279,72 @@ const UploadWorkspace = () => {
         title: "Batch complete!",
         description: `${newHistoryItems.length}/${batchFiles.length} images processed successfully.`,
       });
-      // Reset batch
-      setBatchFiles([]);
-      setBatchProgress({});
-      setActiveTab("history");
     }
 
     setBatchProcessing(false);
   };
+
+  const handleBatchDownloadZip = useCallback(async () => {
+    const processedItems = batchFiles
+      .map((batchFile) => ({
+        name: batchFile.name,
+        url: batchProgress[batchFile.name]?.url,
+      }))
+      .filter((item): item is { name: string; url: string } => Boolean(item.url));
+
+    if (processedItems.length === 0) {
+      toast({
+        title: "No processed files",
+        description: "Process files first, then download them as ZIP.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setBatchZipDownloading(true);
+    try {
+      const zip = new JSZip();
+      const usedNames = new Map<string, number>();
+
+      for (const item of processedItems) {
+        const response = await fetch(normalizeImageUrl(item.url));
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ${item.name}`);
+        }
+
+        const blob = await response.blob();
+        const baseName = makeDownloadName(item.name);
+        const count = usedNames.get(baseName) ?? 0;
+        usedNames.set(baseName, count + 1);
+        const fileName = count === 0 ? baseName : `${baseName.replace(/\.png$/i, "")}-${count + 1}.png`;
+        zip.file(fileName, blob);
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const objectUrl = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `batch-no-bg-${stamp}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+
+      toast({
+        title: "ZIP downloaded",
+        description: `${processedItems.length} image(s) were bundled successfully.`,
+      });
+    } catch {
+      toast({
+        title: "ZIP download failed",
+        description: "Could not create ZIP file. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setBatchZipDownloading(false);
+    }
+  }, [batchFiles, batchProgress, toast]);
 
   const handleDownload = useCallback(async (imageUrl: string, originalName: string, id = "current") => {
     setDownloadingId(id);
@@ -464,6 +524,23 @@ const UploadWorkspace = () => {
                         </>
                       ) : (
                         "Start Processing"
+                      )}
+                    </Button>
+                    <Button
+                      onClick={handleBatchDownloadZip}
+                      disabled={batchProcessing || batchZipDownloading || !batchFiles.some((f) => Boolean(batchProgress[f.name]?.url))}
+                      className="flex-1 bg-gradient-to-r from-fuchsia-600 to-indigo-500 text-white hover:shadow-lg hover:shadow-fuchsia-400/50 font-medium"
+                    >
+                      {batchZipDownloading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Creating ZIP...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4 mr-2" />
+                          Download ZIP
+                        </>
                       )}
                     </Button>
                   </div>
