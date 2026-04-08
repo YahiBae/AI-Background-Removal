@@ -43,7 +43,7 @@ const UploadWorkspace = () => {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [activeTab, setActiveTab] = useState<"workspace" | "history">("workspace");
+  const [activeTab, setActiveTab] = useState<"workspace" | "batch" | "history">("workspace");
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewModalData, setPreviewModalData] = useState<{
@@ -52,6 +52,10 @@ const UploadWorkspace = () => {
     name: string;
   } | null>(null);
   const [showBackgroundReplacer, setShowBackgroundReplacer] = useState(false);
+  const [batchFiles, setBatchFiles] = useState<File[]>([]);
+  const [batchProcessing, setBatchProcessing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<Record<string, { processed: boolean; url: string | null }>>({});
+  const batchFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const MAX_SIZE = 10 * 1024 * 1024;
@@ -182,6 +186,106 @@ const UploadWorkspace = () => {
     setResult(null);
   };
 
+  const handleBatchUpload = (files: File[]) => {
+    const validFiles = files.filter(
+      (f) => ALLOWED.includes(f.type) && f.size <= MAX_SIZE
+    );
+
+    if (validFiles.length === 0) {
+      toast({
+        title: "No valid files",
+        description: "Please select JPG, PNG, or WEBP images under 10MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (validFiles.length !== files.length) {
+      toast({
+        title: "Some files skipped",
+        description: `${files.length - validFiles.length} file(s) were skipped due to format or size.`,
+      });
+    }
+
+    setBatchFiles(validFiles);
+    const progress: Record<string, { processed: boolean; url: string | null }> = {};
+    validFiles.forEach((f) => {
+      progress[f.name] = { processed: false, url: null };
+    });
+    setBatchProgress(progress);
+  };
+
+  const processBatch = async () => {
+    if (batchFiles.length === 0) return;
+
+    setBatchProcessing(true);
+    const newHistoryItems: HistoryItem[] = [];
+    const processedProgress = { ...batchProgress };
+
+    for (const file of batchFiles) {
+      try {
+        // Generate preview for batch file
+        const preview = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.readAsDataURL(file);
+        });
+
+        // Process image
+        const response = await fetch(WEBHOOK_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": file.type,
+            "X-File-Name": encodeURIComponent(file.name),
+          },
+          body: file,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!data.url) {
+          throw new Error("No URL in response");
+        }
+
+        const resultUrl = normalizeImageUrl(String(data.url));
+        processedProgress[file.name] = { processed: true, url: resultUrl };
+        setBatchProgress({ ...processedProgress });
+
+        // Add to history
+        const historyItem: HistoryItem = {
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          originalName: file.name,
+          originalPreview: preview,
+          resultUrl,
+        };
+        newHistoryItems.push(historyItem);
+      } catch (error) {
+        console.error(`Failed to process ${file.name}:`, error);
+        processedProgress[file.name] = { processed: false, url: null };
+        setBatchProgress({ ...processedProgress });
+      }
+    }
+
+    // Save all to history
+    if (newHistoryItems.length > 0) {
+      saveHistory([...newHistoryItems, ...historyItems].slice(0, HISTORY_LIMIT));
+      toast({
+        title: "Batch complete!",
+        description: `${newHistoryItems.length}/${batchFiles.length} images processed successfully.`,
+      });
+      // Reset batch
+      setBatchFiles([]);
+      setBatchProgress({});
+      setActiveTab("history");
+    }
+
+    setBatchProcessing(false);
+  };
+
   const handleDownload = useCallback(async (imageUrl: string, originalName: string, id = "current") => {
     setDownloadingId(id);
 
@@ -265,6 +369,15 @@ const UploadWorkspace = () => {
             <button
               type="button"
               className={`px-4 py-2 rounded-lg text-sm font-medium transition inline-flex items-center gap-2 ${
+                activeTab === "batch" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setActiveTab("batch")}
+            >
+              📦 Batch
+            </button>
+            <button
+              type="button"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition inline-flex items-center gap-2 ${
                 activeTab === "history" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
               onClick={() => setActiveTab("history")}
@@ -275,7 +388,93 @@ const UploadWorkspace = () => {
           </div>
         </div>
 
-        {activeTab === "workspace" && !file ? (
+        {activeTab === "batch" ? (
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-2xl border border-purple-200 p-8 text-center">
+              <h2 className="text-2xl font-heading font-bold mb-4 text-gray-900">Batch Upload Processing</h2>
+              <p className="text-gray-600 mb-6">Upload multiple images at once and process them all together</p>
+              
+              {batchFiles.length === 0 ? (
+                <>
+                  <button
+                    onClick={() => batchFileInputRef.current?.click()}
+                    className="w-full py-12 border-2 border-dashed border-purple-200 rounded-xl hover:border-purple-400 transition text-center text-gray-600 hover:text-gray-900 hover:bg-purple-50"
+                  >
+                    <div className="text-4xl mb-3">📁</div>
+                    <p className="text-lg font-medium mb-1">Click to upload images</p>
+                    <p className="text-sm text-gray-500">Or drag and drop multiple files</p>
+                  </button>
+                  <input
+                    ref={batchFileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => handleBatchUpload(Array.from(e.target.files || []))}
+                    className="hidden"
+                  />
+                </>
+              ) : (
+                <>
+                  <div className="mb-6 text-left">
+                    <h3 className="font-semibold text-gray-900 mb-3">Files to Process: {batchFiles.length}</h3>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {batchFiles.map((f) => (
+                        <div
+                          key={f.name}
+                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-purple-100"
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className="text-xl">
+                              {batchProgress[f.name]?.processed ? (
+                                <span className="text-green-600">✓</span>
+                              ) : batchProcessing ? (
+                                <span className="animate-spin">⏳</span>
+                              ) : (
+                                <span className="text-gray-400">⊙</span>
+                              )}
+                            </span>
+                            <span className="text-sm font-medium text-gray-700 truncate">{f.name}</span>
+                          </div>
+                          <span className="text-xs text-gray-500 ml-2">
+                            {(f.size / 1024 / 1024).toFixed(2)} MB
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => {
+                        setBatchFiles([]);
+                        setBatchProgress({});
+                      }}
+                      variant="outline"
+                      className="flex-1 border-purple-200 text-purple-700 hover:bg-purple-50"
+                      disabled={batchProcessing}
+                    >
+                      Clear
+                    </Button>
+                    <Button
+                      onClick={processBatch}
+                      disabled={batchProcessing}
+                      className="flex-1 bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-400/50 font-medium"
+                    >
+                      {batchProcessing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        "Start Processing"
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        ) : activeTab === "workspace" && !file ? (
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
