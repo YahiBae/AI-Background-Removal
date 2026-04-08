@@ -9,6 +9,8 @@ type SocialPreset = {
   height: number;
 };
 
+type WatermarkPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right" | "center";
+
 const SOCIAL_PRESETS: SocialPreset[] = [
   { key: "original", label: "Original Size", width: 0, height: 0 },
   { key: "instagram-post", label: "Instagram Post (1080 x 1080)", width: 1080, height: 1080 },
@@ -52,6 +54,11 @@ const PreviewModal = ({
   const [saturation, setSaturation] = useState(100);
   const [hueRotate, setHueRotate] = useState(0);
   const [socialPresetKey, setSocialPresetKey] = useState("original");
+  const [watermarkEnabled, setWatermarkEnabled] = useState(false);
+  const [watermarkText, setWatermarkText] = useState("SnapBackground Enterprise");
+  const [watermarkOpacity, setWatermarkOpacity] = useState(35);
+  const [watermarkSize, setWatermarkSize] = useState(5);
+  const [watermarkPosition, setWatermarkPosition] = useState<WatermarkPosition>("bottom-right");
   const [preparingDownload, setPreparingDownload] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -73,6 +80,22 @@ const PreviewModal = ({
   const cropInset = Math.max(0, (100 - cropPercent) / 2);
   const imageFilter = `blur(${blur}px) brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hueRotate}deg)`;
 
+  const getWatermarkPreviewPosition = () => {
+    switch (watermarkPosition) {
+      case "top-left":
+        return "top-4 left-4";
+      case "top-right":
+        return "top-4 right-4";
+      case "bottom-left":
+        return "bottom-4 left-4";
+      case "center":
+        return "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2";
+      case "bottom-right":
+      default:
+        return "bottom-4 right-4";
+    }
+  };
+
   const resetEdits = () => {
     setZoom(100);
     setRotation(0);
@@ -86,6 +109,11 @@ const PreviewModal = ({
     setSaturation(100);
     setHueRotate(0);
     setSocialPresetKey("original");
+    setWatermarkEnabled(false);
+    setWatermarkText("SnapBackground Enterprise");
+    setWatermarkOpacity(35);
+    setWatermarkSize(5);
+    setWatermarkPosition("bottom-right");
   };
 
   const handleEditedDownload = async () => {
@@ -171,6 +199,49 @@ const PreviewModal = ({
         }
       }
 
+      if (watermarkEnabled && watermarkText.trim()) {
+        const watermarkCtx = exportCanvas.getContext("2d");
+        if (watermarkCtx) {
+          const baseSize = Math.max(16, Math.round((Math.min(exportCanvas.width, exportCanvas.height) * watermarkSize) / 100));
+          const margin = Math.max(12, Math.round(baseSize * 0.8));
+          const cleanText = watermarkText.trim();
+
+          watermarkCtx.save();
+          watermarkCtx.globalAlpha = watermarkOpacity / 100;
+          watermarkCtx.fillStyle = "#ffffff";
+          watermarkCtx.strokeStyle = "rgba(0, 0, 0, 0.45)";
+          watermarkCtx.lineWidth = Math.max(2, Math.round(baseSize / 10));
+          watermarkCtx.font = `700 ${baseSize}px Poppins, sans-serif`;
+          watermarkCtx.textAlign = "left";
+          watermarkCtx.textBaseline = "alphabetic";
+
+          const textWidth = watermarkCtx.measureText(cleanText).width;
+          let x = margin;
+          let y = exportCanvas.height - margin;
+
+          if (watermarkPosition === "top-left") {
+            x = margin;
+            y = margin + baseSize;
+          } else if (watermarkPosition === "top-right") {
+            x = exportCanvas.width - textWidth - margin;
+            y = margin + baseSize;
+          } else if (watermarkPosition === "bottom-left") {
+            x = margin;
+            y = exportCanvas.height - margin;
+          } else if (watermarkPosition === "center") {
+            x = (exportCanvas.width - textWidth) / 2;
+            y = exportCanvas.height / 2;
+          } else {
+            x = exportCanvas.width - textWidth - margin;
+            y = exportCanvas.height - margin;
+          }
+
+          watermarkCtx.strokeText(cleanText, x, y);
+          watermarkCtx.fillText(cleanText, x, y);
+          watermarkCtx.restore();
+        }
+      }
+
       const editedBlob = await new Promise<Blob | null>((resolve) => {
         exportCanvas.toBlob(resolve, "image/png");
       });
@@ -221,6 +292,19 @@ const PreviewModal = ({
                 transition: "transform 0.2s ease",
               }}
             />
+
+            {watermarkEnabled && watermarkText.trim() ? (
+              <div
+                className={`pointer-events-none absolute ${getWatermarkPreviewPosition()} text-white font-semibold tracking-wide`}
+                style={{
+                  opacity: watermarkOpacity / 100,
+                  fontSize: `${Math.max(10, watermarkSize * 3)}px`,
+                  textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
+                }}
+              >
+                {watermarkText}
+              </div>
+            ) : null}
           </div>
 
           {/* Tabs */}
@@ -432,6 +516,79 @@ const PreviewModal = ({
                 onChange={(e) => setHueRotate(Number(e.target.value))}
                 className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
               />
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-xl border border-purple-200 bg-white/80 p-3">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Enterprise Watermark</p>
+              <button
+                type="button"
+                onClick={() => setWatermarkEnabled((prev) => !prev)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                  watermarkEnabled ? "bg-purple-600 text-white" : "bg-gray-200 text-gray-700"
+                }`}
+              >
+                {watermarkEnabled ? "Enabled" : "Disabled"}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="flex items-center gap-2">
+                <span className="text-xs text-gray-600 font-medium min-w-20">Text</span>
+                <input
+                  type="text"
+                  value={watermarkText}
+                  onChange={(e) => setWatermarkText(e.target.value)}
+                  className="flex-1 rounded-lg border border-purple-200 bg-white px-2 py-1 text-xs text-gray-700 outline-none"
+                  placeholder="Watermark text"
+                  disabled={!watermarkEnabled}
+                />
+              </label>
+
+              <label className="flex items-center gap-2">
+                <span className="text-xs text-gray-600 font-medium min-w-20">Position</span>
+                <select
+                  value={watermarkPosition}
+                  onChange={(e) => setWatermarkPosition(e.target.value as WatermarkPosition)}
+                  className="flex-1 rounded-lg border border-purple-200 bg-white px-2 py-1 text-xs text-gray-700 outline-none"
+                  disabled={!watermarkEnabled}
+                >
+                  <option value="top-left">Top Left</option>
+                  <option value="top-right">Top Right</option>
+                  <option value="bottom-left">Bottom Left</option>
+                  <option value="bottom-right">Bottom Right</option>
+                  <option value="center">Center</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <label className="flex items-center gap-2">
+                <span className="text-xs text-gray-600 font-medium min-w-20">Opacity</span>
+                <input
+                  type="range"
+                  min="10"
+                  max="100"
+                  value={watermarkOpacity}
+                  onChange={(e) => setWatermarkOpacity(Number(e.target.value))}
+                  className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                  disabled={!watermarkEnabled}
+                />
+              </label>
+
+              <label className="flex items-center gap-2">
+                <span className="text-xs text-gray-600 font-medium min-w-20">Size</span>
+                <input
+                  type="range"
+                  min="2"
+                  max="12"
+                  value={watermarkSize}
+                  onChange={(e) => setWatermarkSize(Number(e.target.value))}
+                  className="flex-1 h-2 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                  disabled={!watermarkEnabled}
+                />
+              </label>
             </div>
           </div>
         </div>
