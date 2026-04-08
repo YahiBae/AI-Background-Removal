@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Upload, X, Download, Loader2, ImageIcon, History, Eye } from "lucide-react";
+import { Upload, X, Download, Loader2, ImageIcon, History, Eye, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import PreviewModal from "@/components/PreviewModal";
+import BackgroundReplacer from "@/components/BackgroundReplacer";
 import { useToast } from "@/hooks/use-toast";
 
 const WEBHOOK_URL = "https://sagarpun.app.n8n.cloud/webhook/remove-background";
@@ -50,6 +51,7 @@ const UploadWorkspace = () => {
     result: string;
     name: string;
   } | null>(null);
+  const [showBackgroundReplacer, setShowBackgroundReplacer] = useState(false);
   const { toast } = useToast();
 
   const MAX_SIZE = 10 * 1024 * 1024;
@@ -209,6 +211,28 @@ const UploadWorkspace = () => {
     }
   }, [toast]);
 
+  const handleBackgroundReplacerDownload = useCallback(
+    (blob: Blob, filename: string) => {
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+      toast({
+        title: "Downloaded",
+        description: "Image with new background saved successfully.",
+      });
+      setShowBackgroundReplacer(false);
+    },
+    [toast]
+  );
+      setDownloadingId(null);
+    }
+  }, [toast]);
+
   const clearHistory = () => {
     window.localStorage.removeItem(HISTORY_STORAGE_KEY);
     setHistoryItems([]);
@@ -348,6 +372,7 @@ const UploadWorkspace = () => {
                 </Button>
               ) : (
                 <>
+                  <>
                   <Button
                     className="bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-400/50 rounded-xl px-8"
                     size="lg"
@@ -362,6 +387,14 @@ const UploadWorkspace = () => {
                   >
                     <Eye className="w-4 h-4 mr-2" />
                     Preview
+                  </Button>
+                  <Button
+                    className="bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-400/50 rounded-xl px-8"
+                    size="lg"
+                    onClick={() => setShowBackgroundReplacer(true)}
+                  >
+                    <Palette className="w-4 h-4 mr-2" />
+                    Replace Background
                   </Button>
                   <Button
                     className="bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-400/50 rounded-xl px-8"
@@ -472,6 +505,14 @@ const UploadWorkspace = () => {
           setShowPreviewModal(false);
         }}
         isDownloading={downloadingId === "current"}
+      />
+
+      <BackgroundReplacer
+        isOpen={showBackgroundReplacer}
+        onClose={() => setShowBackgroundReplacer(false)}
+        resultImage={result || ""}
+        originalName={file?.name || "image"}
+        onDownload={handleBackgroundReplacerDownload}
       />
     </div>
   );
